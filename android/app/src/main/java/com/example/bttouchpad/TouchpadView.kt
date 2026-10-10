@@ -5,11 +5,8 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Rect
-import android.os.Build
 import android.view.MotionEvent
 import android.view.View
-import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 
@@ -19,16 +16,7 @@ import kotlin.math.max
  *  2 пальца — прокрутка, короткий тап двумя пальцами — ПКМ
  */
 @SuppressLint("ViewConstructor")
-class TouchpadView(
-    ctx: Context,
-    private val send: (String) -> Unit,
-    private val onEdgeSwipe: () -> Unit
-) : View(ctx) {
-    private val density = ctx.resources.displayMetrics.density
-    private val edgeW = 32 * density          // зона у правого края
-    private val edgeDist = 60 * density       // длина свайпа влево
-    private var edgeCandidate = false
-    private var edgeDone = false
+class TouchpadView(ctx: Context, private val send: (String) -> Unit) : View(ctx) {
     var gain = 1.8f              // чувствительность курсора
     private val scrollStep = 30f // пикселей на один «щелчок» колеса
     private val slop = 24f
@@ -51,18 +39,6 @@ class TouchpadView(
         c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bg)
         c.drawText("1 палец — курсор, тап — ЛКМ", width / 2f, height / 2f - 30f, hint)
         c.drawText("2 пальца — прокрутка, тап — ПКМ", width / 2f, height / 2f + 30f, hint)
-        c.drawText("свайп от правого края — клавиатура", width / 2f, height / 2f + 90f, hint)
-    }
-
-    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        super.onLayout(changed, l, t, r, b)
-        if (Build.VERSION.SDK_INT >= 29) {
-            // не даём системному жесту «назад» перехватывать свайп от правого края
-            val w = (48 * density).toInt()
-            val h = minOf((200 * density).toInt(), height)
-            val top = (height - h) / 2
-            systemGestureExclusionRects = listOf(Rect(width - w, top, width, top + h))
-        }
     }
 
     private fun avgX(ev: MotionEvent, skip: Int = -1): Float {
@@ -83,11 +59,8 @@ class TouchpadView(
                 lastX = ev.x; lastY = ev.y; startX = ev.x; startY = ev.y
                 downTime = ev.eventTime; moved = false; maxPointers = 1
                 remX = 0f; remY = 0f; accX = 0f; accY = 0f
-                edgeCandidate = ev.x > width - edgeW
-                edgeDone = false
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
-                edgeCandidate = false
                 maxPointers = max(maxPointers, ev.pointerCount)
                 lastX = avgX(ev); lastY = avgY(ev)
             }
@@ -96,20 +69,6 @@ class TouchpadView(
                 lastX = avgX(ev, ev.actionIndex); lastY = avgY(ev, ev.actionIndex)
             }
             MotionEvent.ACTION_MOVE -> {
-                if (edgeDone) return true
-                if (edgeCandidate) {
-                    val ddx = startX - ev.x
-                    val ddy = abs(ev.y - startY)
-                    if (ddx > edgeDist && ddx > ddy) {
-                        edgeDone = true
-                        onEdgeSwipe()
-                        return true
-                    }
-                    if (ddy > slop && ddy > abs(ddx)) {
-                        edgeCandidate = false          // это не свайп — обычный тачпад
-                        lastX = ev.x; lastY = ev.y
-                    } else return true
-                }
                 val cx = avgX(ev); val cy = avgY(ev)
                 val dx = cx - lastX; val dy = cy - lastY
                 lastX = cx; lastY = cy
@@ -117,7 +76,6 @@ class TouchpadView(
                 if (ev.pointerCount == 1) move(dx, dy) else scroll(dx, dy)
             }
             MotionEvent.ACTION_UP -> {
-                if (edgeDone) return true
                 if (!moved && ev.eventTime - downTime < tapMs) {
                     send(if (maxPointers >= 2) "c r" else "c l")
                 }

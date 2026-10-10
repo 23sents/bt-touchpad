@@ -8,11 +8,13 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothSocket
 import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
@@ -107,23 +109,28 @@ class MainActivity : Activity() {
         }
     }
 
-    private var kb: View? = null
+    private var capture: KeyCaptureView? = null
+    private var kbShown = false
 
-    private fun toggleKeyboard(show: Boolean? = null) {
-        val v = kb ?: return
-        val want = show ?: (v.visibility != View.VISIBLE)
-        v.visibility = if (want) View.VISIBLE else View.GONE
+    private fun toggleKeyboard() {
+        val c = capture ?: return
+        val imm = getSystemService(InputMethodManager::class.java)
+        if (kbShown) {
+            imm.hideSoftInputFromWindow(c.windowToken, 0)
+            kbShown = false
+        } else {
+            c.requestFocus()
+            c.post { imm.showSoftInput(c, 0) }
+        }
     }
 
     private fun showPad() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(TouchpadView(this, { send(it) }, { toggleKeyboard(true) }),
+        root.addView(TouchpadView(this) { send(it) },
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        val keyboard = KeyboardView(this, { send(it) }, { toggleKeyboard(false) })
-        keyboard.visibility = View.GONE
-        kb = keyboard
-        root.addView(keyboard,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.2f))
+        val cap = KeyCaptureView(this) { send(it) }
+        capture = cap
+        root.addView(cap, LinearLayout.LayoutParams(1, 1))
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val lp = { LinearLayout.LayoutParams(0, 220, 1f) }
         row.addView(mouseButton("ЛКМ", "l"), lp())
@@ -137,12 +144,19 @@ class MainActivity : Activity() {
             setOnClickListener { disconnect(); showDevices() }
         }, LinearLayout.LayoutParams(0, 220, 0.8f))
         root.addView(row)
+        // следим, показана ли системная клавиатура, чтобы кнопка ⌨ работала как переключатель
+        root.viewTreeObserver.addOnGlobalLayoutListener {
+            val r = Rect()
+            root.getWindowVisibleDisplayFrame(r)
+            val screen = root.rootView.height
+            kbShown = screen - r.bottom > screen * 0.15
+        }
         setContentView(root)
     }
 
     private fun disconnect() {
         try { socket?.close() } catch (_: IOException) {}
-        socket = null; out = null; kb = null
+        socket = null; out = null; capture = null; kbShown = false
     }
 
     override fun onDestroy() { disconnect(); io.shutdownNow(); super.onDestroy() }
