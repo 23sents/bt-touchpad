@@ -64,6 +64,9 @@ def handle(line: str):
 def reader(fd: int):
     buf = b""
     try:
+        # BlueZ отдаёт сокет в неблокирующем режиме — без этого os.read()
+        # сразу падает с BlockingIOError и соединение закрывается.
+        os.set_blocking(fd, True)
         while True:
             data = os.read(fd, 1024)
             if not data:
@@ -72,8 +75,8 @@ def reader(fd: int):
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
                 handle(line.decode(errors="ignore"))
-    except OSError:
-        pass
+    except OSError as err:
+        print("Ошибка чтения:", err)
     finally:
         release_all()
         try:
