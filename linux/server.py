@@ -16,6 +16,8 @@ from gi.repository import GLib
 UUID = "8f1c2a5e-6b7d-4c1a-9a3e-5d2b7c9e1f40"   # должен совпадать с Android-приложением
 PATH = "/org/bttouchpad/profile"
 BUTTONS = {"l": e.BTN_LEFT, "r": e.BTN_RIGHT, "m": e.BTN_MIDDLE}
+KEYS = {n: c for n, c in e.ecodes.items() if n.startswith("KEY_") and 0 < c < 256}
+held = set()
 
 ui = UInput(
     {
@@ -26,10 +28,17 @@ ui = UInput(
 )
 
 
+kbd = UInput({e.EV_KEY: sorted(set(KEYS.values()))}, name="BT Touchpad Keyboard")
+
+
 def release_all():
     for b in BUTTONS.values():
         ui.write(e.EV_KEY, b, 0)
     ui.syn()
+    for c in list(held):
+        kbd.write(e.EV_KEY, c, 0)
+    held.clear()
+    kbd.syn()
 
 
 def handle(line: str):
@@ -54,6 +63,16 @@ def handle(line: str):
             ui.write(e.EV_KEY, BUTTONS[p[1]], 1)
             ui.syn()
             ui.write(e.EV_KEY, BUTTONS[p[1]], 0)
+        elif cmd == "k":                    # k KEY_NAME 1|0  — клавиша вниз/вверх
+            code = KEYS[p[1]]
+            down = int(p[2])
+            kbd.write(e.EV_KEY, code, 1 if down else 0)
+            kbd.syn()
+            if down:
+                held.add(code)
+            else:
+                held.discard(code)
+            return
         else:
             return
         ui.syn()
@@ -121,6 +140,7 @@ def main():
     finally:
         release_all()
         ui.close()
+        kbd.close()
 
 
 if __name__ == "__main__":

@@ -107,25 +107,42 @@ class MainActivity : Activity() {
         }
     }
 
+    private var kb: View? = null
+
+    private fun toggleKeyboard(show: Boolean? = null) {
+        val v = kb ?: return
+        val want = show ?: (v.visibility != View.VISIBLE)
+        v.visibility = if (want) View.VISIBLE else View.GONE
+    }
+
     private fun showPad() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(TouchpadView(this) { send(it) },
+        root.addView(TouchpadView(this, { send(it) }, { toggleKeyboard(true) }),
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        val keyboard = KeyboardView(this, { send(it) }, { toggleKeyboard(false) })
+        keyboard.visibility = View.GONE
+        kb = keyboard
+        root.addView(keyboard,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.2f))
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val lp = { LinearLayout.LayoutParams(0, 220, 1f) }
         row.addView(mouseButton("ЛКМ", "l"), lp())
         row.addView(mouseButton("ПКМ", "r"), lp())
         row.addView(Button(this).apply {
+            text = "⌨"
+            setOnClickListener { toggleKeyboard() }
+        }, LinearLayout.LayoutParams(0, 220, 0.6f))
+        row.addView(Button(this).apply {
             text = "Выход"
             setOnClickListener { disconnect(); showDevices() }
-        }, LinearLayout.LayoutParams(0, 220, 0.6f))
+        }, LinearLayout.LayoutParams(0, 220, 0.8f))
         root.addView(row)
         setContentView(root)
     }
 
     private fun disconnect() {
         try { socket?.close() } catch (_: IOException) {}
-        socket = null; out = null
+        socket = null; out = null; kb = null
     }
 
     override fun onDestroy() { disconnect(); io.shutdownNow(); super.onDestroy() }
